@@ -334,6 +334,29 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         );
       }
 
+      // Calculate side income
+      let sideIncome = 0;
+      // Calculate one-time side incomes
+      const oneTimeSideIncomes = incomeInfo.sideIncomes
+        .filter(income => income.type === 'one-time' && income.oneTime)
+        .filter(income => {
+          const incomeAge = income.oneTime!.age;
+          return age === incomeAge;
+        })
+        .reduce((sum, income) => sum + income.oneTime!.amount, 0);
+
+      // Calculate recurring side incomes
+      const recurringSideIncomes = incomeInfo.sideIncomes
+        .filter(income => income.type === 'recurring' && income.recurring)
+        .filter(income => {
+          const startAge = income.recurring!.startAge;
+          const endAge = income.recurring!.endAge;
+          return age >= startAge && age <= endAge;
+        })
+        .reduce((sum, income) => sum + (income.recurring!.monthlyAmount * 12), 0);
+
+      sideIncome = oneTimeSideIncomes + recurringSideIncomes;
+
       // Calculate spouse income
       let spouseIncome = 0;
       if (basicInfo.maritalStatus === 'married' && basicInfo.spouseInfo?.currentAge !== undefined && incomeInfo.spouse) {
@@ -410,7 +433,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       // Store cash flow data
       newCashFlow[year] = {
         mainIncome: Number(mainIncome.toFixed(1)),
-        sideIncome: 0,
+        sideIncome: Number(sideIncome.toFixed(1)),
         investmentIncome: Number(investmentReturn.toFixed(1)),
         spouseIncome: Number(spouseIncome.toFixed(1)),
         livingExpense: Number(livingExpense.toFixed(1)),
@@ -420,7 +443,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
       };
 
       // Update previous year assets for next iteration
-      const income = mainIncome + spouseIncome + investmentReturn;
+      const income = mainIncome + sideIncome + spouseIncome + investmentReturn;
       const expenses = livingExpense + housingExpense + educationExpense;
       previousYearAssets = Number((previousYearAssets + income - expenses + lifeEventImpact).toFixed(1));
     });
