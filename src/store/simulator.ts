@@ -401,8 +401,11 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         parameters.educationCostIncreaseRate
       );
 
-      // Calculate other expenses from life events
-      const otherExpense = calculateLifeEventExpense(lifeEvents, year);
+      // Calculate life event impact
+      const yearLifeEvents = lifeEvents.filter(event => event.year === year);
+      const lifeEventImpact = yearLifeEvents.reduce((sum, event) => {
+        return sum + (event.type === 'income' ? event.amount : -event.amount);
+      }, 0);
 
       // Store cash flow data
       newCashFlow[year] = {
@@ -413,13 +416,13 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         livingExpense: Number(livingExpense.toFixed(1)),
         housingExpense: Number(housingExpense.toFixed(1)),
         educationExpense: Number(educationExpense.toFixed(1)),
-        otherExpense: Number(otherExpense.toFixed(1)),
+        otherExpense: Number(lifeEventImpact.toFixed(1)),
       };
 
       // Update previous year assets for next iteration
       const income = mainIncome + spouseIncome + investmentReturn;
-      const expenses = livingExpense + housingExpense + educationExpense + otherExpense;
-      previousYearAssets = Number((previousYearAssets + income - expenses).toFixed(1));
+      const expenses = livingExpense + housingExpense + educationExpense;
+      previousYearAssets = Number((previousYearAssets + income - expenses + lifeEventImpact).toFixed(1));
     });
 
     set({ cashFlow: newCashFlow });
@@ -488,20 +491,6 @@ function calculateEducationExpense(
   }, 0);
 
   return Number((existingChildrenExpense + plannedChildrenExpense).toFixed(1));
-}
-
-function calculateLifeEventExpense(lifeEvents: any[], year: number) {
-  const expense = lifeEvents.reduce((total, event) => {
-    if (event.year === year) {
-      if (event.type === 'expense') {
-        return total + event.amount;
-      } else {
-        return total - event.amount;
-      }
-    }
-    return total;
-  }, 0);
-  return Number(expense.toFixed(1));
 }
 
 function getUniversityCost(universityType: string) {

@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useSimulatorStore } from '@/store/simulator';
+import { calculateNetIncomeWithRaise, calculatePension } from '@/lib/calculations';
+import { Download } from 'lucide-react';
 
 function calculateAge(startYear: number, currentAge: number, targetYear: number) {
   return currentAge + (targetYear - startYear);
@@ -52,12 +54,13 @@ export function CashFlowForm() {
   const {
     basicInfo,
     incomeInfo,
-    lifeEvents,
+    cashFlow,
     assetsLiabilities,
     parameters,
-    cashFlow,
+    lifeEvents,
+    setCurrentStep,
     updateCashFlowValue,
-    setCurrentStep
+    initializeCashFlow,
   } = useSimulatorStore();
   
   const yearsUntilDeath = basicInfo.deathAge - basicInfo.currentAge;
@@ -65,6 +68,12 @@ export function CashFlowForm() {
     { length: yearsUntilDeath + 1 },
     (_, i) => basicInfo.startYear + i
   );
+
+  useEffect(() => {
+    if (Object.keys(cashFlow).length === 0) {
+      initializeCashFlow();
+    }
+  }, []);
 
   // Calculate initial total assets
   const initialAssets = Object.values(assetsLiabilities.assets).reduce((sum, value) => sum + value, 0);
@@ -101,7 +110,6 @@ export function CashFlowForm() {
       return acc;
     }
 
-    // For the first year, include initial assets in income
     const income = cf.mainIncome + cf.sideIncome + cf.spouseIncome + 
                   (index === 0 ? initialAssets : investmentData.returns[year]);
     
@@ -120,6 +128,73 @@ export function CashFlowForm() {
     return acc;
   }, { yearly: {}, cumulative: {} });
 
+  const handleExportCSV = () => {
+    // ヘッダー行の作成
+    const headers = [
+      '年度',
+      '年齢',
+      'イベント',
+      '主たる収入（万円）',
+      '副業収入（万円）',
+      '配偶者の収入（万円）',
+      '運用資産（万円）',
+      '運用収益（万円）',
+      '生活費（万円）',
+      '住居費（万円）',
+      '教育費（万円）',
+      'その他収支（万円）',
+      '収支（万円）',
+      '総収支（万円）'
+    ];
+
+    // データ行の作成
+    const rows = years.map(year => {
+      const cf = cashFlow[year] || {
+        mainIncome: 0,
+        sideIncome: 0,
+        spouseIncome: 0,
+        livingExpense: 0,
+        housingExpense: 0,
+        educationExpense: 0,
+        otherExpense: 0
+      };
+
+      return [
+        year,
+        calculateAge(basicInfo.startYear, basicInfo.currentAge, year),
+        getLifeEventDescription(year, basicInfo, basicInfo.children, basicInfo.plannedChildren, lifeEvents),
+        cf.mainIncome,
+        cf.sideIncome,
+        cf.spouseIncome,
+        investmentData.assets[year],
+        investmentData.returns[year],
+        cf.livingExpense,
+        cf.housingExpense,
+        cf.educationExpense,
+        cf.otherExpense,
+        balances.yearly[year],
+        balances.cumulative[year]
+      ];
+    });
+
+    // CSVデータの作成
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // BOMを追加してExcelで文字化けを防ぐ
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `キャッシュフロー_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleNext = () => {
     setCurrentStep(7);
   };
@@ -130,7 +205,16 @@ export function CashFlowForm() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold">キャッシュフロー</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold">キャッシュフロー</h2>
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+        >
+          <Download className="h-4 w-4" />
+          CSVエクスポート
+        </button>
+      </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
@@ -263,11 +347,11 @@ export function CashFlowForm() {
               ))}
             </tr>
             <tr>
-              <td className="px-4 py-2 text-sm text-gray-900 sticky left-0 bg-white">その他（万円）</td>
+              <td className="px-4 py-2 text-sm text-gray-900 sticky left-0 bg-white">その他収支（万円）</td>
               {years.map(year => {
                 const yearLifeEvents = lifeEvents.filter(event => event.year === year);
                 const lifeEventImpact = yearLifeEvents.reduce((sum, event) => {
-                  return event.type === 'expense' ? sum + event.amount : sum;
+                  return sum + (event.type === 'income' ? event.amount : -event.amount);
                 }, 0);
                 return (
                   <td key={year} className="px-4 py-2 text-right text-sm">

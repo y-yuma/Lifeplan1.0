@@ -111,6 +111,7 @@ export function SimulationResults() {
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     interaction: {
       mode: 'index' as const,
       intersect: false,
@@ -118,10 +119,20 @@ export function SimulationResults() {
     plugins: {
       legend: {
         position: 'top' as const,
+        labels: {
+          boxWidth: 10,
+          padding: 10,
+          font: {
+            size: window.innerWidth < 768 ? 10 : 12,
+          },
+        },
       },
       title: {
         display: true,
         text: 'キャッシュフローシミュレーション',
+        font: {
+          size: window.innerWidth < 768 ? 14 : 16,
+        },
       },
     },
     scales: {
@@ -132,12 +143,23 @@ export function SimulationResults() {
         title: {
           display: true,
           text: '金額（万円）',
+          font: {
+            size: window.innerWidth < 768 ? 10 : 12,
+          },
+        },
+        ticks: {
+          font: {
+            size: window.innerWidth < 768 ? 10 : 12,
+          },
         },
       },
       x: {
         title: {
           display: true,
           text: '年齢',
+          font: {
+            size: window.innerWidth < 768 ? 10 : 12,
+          },
         },
         ticks: {
           callback: function(value: any) {
@@ -145,6 +167,11 @@ export function SimulationResults() {
             const age = basicInfo.currentAge + (year - basicInfo.startYear);
             return `${age}歳`;
           },
+          font: {
+            size: window.innerWidth < 768 ? 10 : 12,
+          },
+          maxRotation: 45,
+          minRotation: 45,
         },
       },
     },
@@ -183,8 +210,10 @@ export function SimulationResults() {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow">
-        <Line options={options} data={data} />
+      <div className="bg-white p-4 md:p-6 rounded-lg shadow">
+        <div className="h-[50vh] md:h-[60vh]">
+          <Line options={options} data={data} />
+        </div>
       </div>
 
       <div className="flex justify-between space-x-4">
