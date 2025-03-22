@@ -324,6 +324,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
           basicInfo.startYear
         );
       }
+      // Add severance pay in the retirement year
+      if (age === incomeInfo.workEndAge) {
+        mainIncome += incomeInfo.severancePay;
+      }
       if (age >= incomeInfo.pensionStartAge) {
         mainIncome += calculatePension(
           incomeInfo.annualIncome,
@@ -370,6 +374,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
             basicInfo.startYear
           );
         }
+        // Add spouse's severance pay in their retirement year
+        if (spouseAge === incomeInfo.spouse.workEndAge) {
+          spouseIncome += incomeInfo.spouse.severancePay;
+        }
         if (spouseAge >= incomeInfo.pensionStartAge) {
           spouseIncome += calculatePension(
             incomeInfo.spouse.annualIncome,
@@ -391,6 +399,10 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
               year,
               marriageYear
             );
+          }
+          // Add spouse's severance pay in their retirement year
+          if (spouseAge === incomeInfo.spouse.workEndAge) {
+            spouseIncome += incomeInfo.spouse.severancePay;
           }
           if (spouseAge >= incomeInfo.pensionStartAge) {
             spouseIncome += calculatePension(

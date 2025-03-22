@@ -99,6 +99,8 @@ export function BasicInfoForm() {
   const maritalStatus = watch('maritalStatus');
   const children = watch('children') || [];
   const plannedChildren = watch('plannedChildren') || [];
+  const housingType = watch('housingInfo.type');
+  const startYear = watch('startYear');
 
   const onSubmit = (data: BasicInfoFormData) => {
     setBasicInfo(data);
@@ -108,6 +110,30 @@ export function BasicInfoForm() {
   const handleMaritalStatusChange = (value: string) => {
     setValue('maritalStatus', value as 'single' | 'married' | 'planning');
     setValue('spouseInfo', undefined);
+  };
+
+  const handleHousingTypeChange = (value: 'rent' | 'own') => {
+    if (value === 'rent') {
+      setValue('housingInfo', {
+        type: 'rent',
+        rent: {
+          monthlyRent: 0,
+          annualIncreaseRate: 0,
+        },
+      }, { shouldValidate: true });
+    } else {
+      setValue('housingInfo', {
+        type: 'own',
+        own: {
+          purchaseYear: startYear || currentYear,
+          purchasePrice: 0,
+          loanAmount: 0,
+          interestRate: 0,
+          loanTermYears: 35,
+          maintenanceCostRate: 1,
+        },
+      }, { shouldValidate: true });
+    }
   };
 
   const addChild = () => {
@@ -324,44 +350,23 @@ export function BasicInfoForm() {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">住居費設定</h3>
           <div className="space-y-4">
-            <div className="flex items-center space-x-4">
-              <label className="inline-flex items-center">
-                <input
-                  type="radio"
-                  className="form-radio"
-                  checked={watch('housingInfo.type') === 'rent'}
-                  onChange={() => setValue('housingInfo', {
-                    type: 'rent',
-                    rent: {
-                      monthlyRent: 0,
-                      annualIncreaseRate: 0,
-                    }
-                  })}
-                />
-                <span className="ml-2">賃貸</span>
-              </label>
-              <label className="inline-flex items-center">
-                <input
-                  type="radio"
-                  className="form-radio"
-                  checked={watch('housingInfo.type') === 'own'}
-                  onChange={() => setValue('housingInfo', {
-                    type: 'own',
-                    own: {
-                      purchaseYear: watch('startYear'),
-                      purchasePrice: 0,
-                      loanAmount: 0,
-                      interestRate: 0,
-                      loanTermYears: 35,
-                      maintenanceCostRate: 1,
-                    }
-                  })}
-                />
-                <span className="ml-2">住宅購入／ローン</span>
-              </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">住居タイプ</label>
+              <Select
+                value={housingType}
+                onValueChange={handleHousingTypeChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="住居タイプを選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rent">賃貸</SelectItem>
+                  <SelectItem value="own">住宅購入／ローン</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {watch('housingInfo.type') === 'rent' && (
+            {housingType === 'rent' && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">初期賃料（万円/月）</label>
@@ -383,7 +388,7 @@ export function BasicInfoForm() {
               </div>
             )}
 
-            {watch('housingInfo.type') === 'own' && (
+            {housingType === 'own' && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">購入予定年</label>
