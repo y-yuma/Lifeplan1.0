@@ -26,7 +26,7 @@ export function SimulationResults() {
   const { 
     basicInfo, 
     cashFlow, 
-    assetsLiabilities, 
+    assetsLiabilities,
     parameters,
     lifeEvents,
     setCurrentStep 
@@ -39,6 +39,28 @@ export function SimulationResults() {
 
   // Calculate initial total assets
   const initialAssets = Object.values(assetsLiabilities.assets).reduce((sum, value) => sum + value, 0);
+  const initialLiabilities = Object.values(assetsLiabilities.liabilities).reduce((sum, value) => sum + value, 0);
+  const netInitialAssets = initialAssets - initialLiabilities;
+
+  // Calculate yearly balances first
+  const yearlyBalances = years.reduce((acc: { [year: number]: number }, year) => {
+    const cf = cashFlow[year];
+    if (!cf) {
+      acc[year] = 0;
+      return acc;
+    }
+
+    const income = cf.mainIncome + cf.sideIncome + cf.spouseIncome;
+    const expenses = cf.livingExpense + cf.housingExpense + cf.educationExpense + cf.otherExpense;
+    
+    const yearLifeEvents = lifeEvents.filter(event => event.year === year);
+    const lifeEventImpact = yearLifeEvents.reduce((sum, event) => {
+      return sum + (event.type === 'income' ? event.amount : -event.amount);
+    }, 0);
+
+    acc[year] = income - expenses + lifeEventImpact;
+    return acc;
+  }, {});
 
   // Calculate investment assets and returns for each year
   const investmentData = years.reduce((acc: { 
@@ -46,16 +68,21 @@ export function SimulationResults() {
     returns: { [year: number]: number }
   }, year, index) => {
     if (index === 0) {
-      acc.assets[year] = initialAssets;
-      acc.returns[year] = 0;
+      // 初年度は純資産＋その年の収支
+      const firstYearTotal = netInitialAssets + yearlyBalances[year];
+      acc.assets[year] = firstYearTotal;
+      acc.returns[year] = Number((firstYearTotal * (parameters.investmentReturn / 100)).toFixed(1));
       return acc;
     }
 
     const prevYear = years[index - 1];
     const prevAssets = acc.assets[prevYear];
-    const investmentReturn = Number((prevAssets * (parameters.investmentReturn / 100)).toFixed(1));
-    acc.assets[year] = Number((prevAssets + investmentReturn).toFixed(1));
-    acc.returns[year] = investmentReturn;
+    const prevReturns = acc.returns[prevYear];
+    
+    // 前年の資産に運用収益を加え、さらに当年の収支を加算
+    const currentYearAssets = prevAssets + prevReturns + yearlyBalances[year];
+    acc.assets[year] = Number(currentYearAssets.toFixed(1));
+    acc.returns[year] = Number((currentYearAssets * (parameters.investmentReturn / 100)).toFixed(1));
 
     return acc;
   }, { assets: {}, returns: {} });
@@ -68,7 +95,7 @@ export function SimulationResults() {
         data: years.map(year => {
           const cf = cashFlow[year];
           if (!cf) return 0;
-          return cf.mainIncome + cf.sideIncome + cf.spouseIncome + investmentData.returns[year];
+          return cf.mainIncome + cf.sideIncome + cf.spouseIncome;
         }),
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
@@ -101,7 +128,7 @@ export function SimulationResults() {
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
       },
       {
-        label: '運用資産',
+        label: '総資産',
         data: years.map(year => investmentData.assets[year]),
         borderColor: 'rgb(255, 205, 86)',
         backgroundColor: 'rgba(255, 205, 86, 0.5)',
@@ -186,7 +213,7 @@ export function SimulationResults() {
         basicInfo.occupation === 'part_time_without_pension' ? 'パート（厚生年金なし）' :
         '専業主婦・夫'}`,
       `年収${cashFlow[basicInfo.startYear]?.mainIncome}万円`,
-      `現在の総資産：${initialAssets}万円`,
+      `現在の総資産：${netInitialAssets}万円`,
       `資産運用利回り：${parameters.investmentReturn}%`,
       `配偶者の有無：${basicInfo.maritalStatus !== 'single' ? 'あり' : 'なし'}`,
       `結婚の予定：${basicInfo.maritalStatus === 'planning' ? 'あり' : 'なし'}`,

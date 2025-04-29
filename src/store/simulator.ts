@@ -207,7 +207,13 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     pensionStartAge: 65,
     pensionAmount: 0,
     sideIncomes: [],
-    spouse: undefined,
+    spouse: {
+      annualIncome: 0,
+      severancePay: 0,
+      workStartAge: 22,
+      workEndAge: 60,
+      pensionAmount: 0,
+    },
   },
   expenseInfo: {
     livingExpense: 0,
@@ -306,7 +312,7 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
     const initialAssets = Object.values(assetsLiabilities.assets).reduce((sum, value) => sum + value, 0) -
                          Object.values(assetsLiabilities.liabilities).reduce((sum, value) => sum + value, 0);
 
-    let previousYearAssets = initialAssets;
+    let currentAssets = initialAssets;
 
     years.forEach((year) => {
       const yearsSinceStart = year - basicInfo.startYear;
@@ -416,9 +422,9 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         }
       }
 
-      // Calculate investment return
-      const investmentReturn = previousYearAssets > 0 ? 
-        Number((previousYearAssets * (parameters.investmentReturn / 100)).toFixed(1)) : 0;
+      // Calculate investment return based on current assets
+      const investmentReturn = currentAssets > 0 ? 
+        Number((currentAssets * (parameters.investmentReturn / 100)).toFixed(1)) : 0;
 
       // Calculate living expenses with inflation
       const livingExpense = Number((basicInfo.monthlyLivingExpense * 12 * inflationMultiplier).toFixed(1));
@@ -454,10 +460,13 @@ export const useSimulatorStore = create<SimulatorState>((set, get) => ({
         otherExpense: Number(lifeEventImpact.toFixed(1)),
       };
 
-      // Update previous year assets for next iteration
-      const income = mainIncome + sideIncome + spouseIncome + investmentReturn;
-      const expenses = livingExpense + housingExpense + educationExpense;
-      previousYearAssets = Number((previousYearAssets + income - expenses + lifeEventImpact).toFixed(1));
+      // Calculate yearly balance and update current assets for next year
+      const yearlyIncome = mainIncome + sideIncome + spouseIncome + investmentReturn;
+      const yearlyExpenses = livingExpense + housingExpense + educationExpense;
+      const yearlyBalance = yearlyIncome - yearlyExpenses + lifeEventImpact;
+      
+      // Update current assets with this year's balance
+      currentAssets = Number((currentAssets + yearlyBalance).toFixed(1));
     });
 
     set({ cashFlow: newCashFlow });

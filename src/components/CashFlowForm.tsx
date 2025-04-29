@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { useSimulatorStore } from '@/store/simulator';
-import { calculateNetIncomeWithRaise, calculatePension } from '@/lib/calculations';
 import { Download } from 'lucide-react';
 
 function calculateAge(startYear: number, currentAge: number, targetYear: number) {
@@ -77,42 +76,18 @@ export function CashFlowForm() {
 
   // Calculate initial total assets
   const initialAssets = Object.values(assetsLiabilities.assets).reduce((sum, value) => sum + value, 0);
+  const initialLiabilities = Object.values(assetsLiabilities.liabilities).reduce((sum, value) => sum + value, 0);
+  const netInitialAssets = initialAssets - initialLiabilities;
 
-  // Calculate investment assets and returns for each year
-  const investmentData = years.reduce((acc: { 
-    assets: { [year: number]: number },
-    returns: { [year: number]: number }
-  }, year, index) => {
-    if (index === 0) {
-      acc.assets[year] = initialAssets;
-      acc.returns[year] = 0;
-      return acc;
-    }
-
-    const prevYear = years[index - 1];
-    const prevAssets = acc.assets[prevYear];
-    const investmentReturn = Number((prevAssets * (parameters.investmentReturn / 100)).toFixed(1));
-    acc.assets[year] = Number((prevAssets + investmentReturn).toFixed(1));
-    acc.returns[year] = investmentReturn;
-
-    return acc;
-  }, { assets: {}, returns: {} });
-
-  // Calculate yearly and cumulative balances
-  const balances = years.reduce((acc: { 
-    yearly: { [year: number]: number },
-    cumulative: { [year: number]: number }
-  }, year, index) => {
+  // Calculate yearly balances first
+  const yearlyBalances = years.reduce((acc: { [year: number]: number }, year) => {
     const cf = cashFlow[year];
     if (!cf) {
-      acc.yearly[year] = 0;
-      acc.cumulative[year] = index === 0 ? 0 : acc.cumulative[years[index - 1]];
+      acc[year] = 0;
       return acc;
     }
 
-    const income = cf.mainIncome + cf.sideIncome + cf.spouseIncome + 
-                  (index === 0 ? initialAssets : investmentData.returns[year]);
-    
+    const income = cf.mainIncome + cf.sideIncome + cf.spouseIncome;
     const expenses = cf.livingExpense + cf.housingExpense + cf.educationExpense + cf.otherExpense;
     
     const yearLifeEvents = lifeEvents.filter(event => event.year === year);
@@ -120,13 +95,34 @@ export function CashFlowForm() {
       return sum + (event.type === 'income' ? event.amount : -event.amount);
     }, 0);
 
-    acc.yearly[year] = Number((income - expenses + lifeEventImpact).toFixed(1));
-    acc.cumulative[year] = index === 0 ? 
-      acc.yearly[year] : 
-      Number((acc.cumulative[years[index - 1]] + acc.yearly[year]).toFixed(1));
+    acc[year] = income - expenses + lifeEventImpact;
+    return acc;
+  }, {});
+
+  // Calculate investment assets and returns for each year
+  const investmentData = years.reduce((acc: { 
+    assets: { [year: number]: number },
+    returns: { [year: number]: number }
+  }, year, index) => {
+    if (index === 0) {
+      // 初年度は純資産＋その年の収支
+      const firstYearTotal = netInitialAssets + yearlyBalances[year];
+      acc.assets[year] = firstYearTotal;
+      acc.returns[year] = Number((firstYearTotal * (parameters.investmentReturn / 100)).toFixed(1));
+      return acc;
+    }
+
+    const prevYear = years[index - 1];
+    const prevAssets = acc.assets[prevYear];
+    const prevReturns = acc.returns[prevYear];
+    
+    // 前年の資産に運用収益を加え、さらに当年の収支を加算
+    const currentYearAssets = prevAssets + prevReturns + yearlyBalances[year];
+    acc.assets[year] = Number(currentYearAssets.toFixed(1));
+    acc.returns[year] = Number((currentYearAssets * (parameters.investmentReturn / 100)).toFixed(1));
 
     return acc;
-  }, { yearly: {}, cumulative: {} });
+  }, { assets: {}, returns: {} });
 
   const handleExportCSV = () => {
     // ヘッダー行の作成
@@ -144,7 +140,7 @@ export function CashFlowForm() {
       '教育費（万円）',
       'その他収支（万円）',
       '収支（万円）',
-      '総収支（万円）'
+      '総資産（万円）'
     ];
 
     // データ行の作成
@@ -172,8 +168,8 @@ export function CashFlowForm() {
         cf.housingExpense,
         cf.educationExpense,
         cf.otherExpense,
-        balances.yearly[year],
-        balances.cumulative[year]
+        yearlyBalances[year],
+        investmentData.assets[year]
       ];
     });
 
@@ -293,15 +289,8 @@ export function CashFlowForm() {
                   <input
                     type="number"
                     value={investmentData.assets[year]}
-                    onChange={(e) => {
-                      const newValue = Number(e.target.value);
-                      investmentData.assets[year] = newValue;
-                      const nextYear = years[years.indexOf(year) + 1];
-                      if (nextYear) {
-                        investmentData.returns[nextYear] = Number((newValue * (parameters.investmentReturn / 100)).toFixed(1));
-                      }
-                    }}
-                    className="w-24 text-right border-gray-200 rounded-md"
+                    readOnly
+                    className="w-24 text-right border-gray-200 rounded-md bg-gray-50"
                   />
                   （+{investmentData.returns[year]}）
                 </td>
@@ -368,7 +357,7 @@ export function CashFlowForm() {
             <tr className="bg-gray-50 font-medium">
               <td className="px-4 py-2 text-sm text-gray-900 sticky left-0 bg-gray-50">収支</td>
               {years.map(year => {
-                const balance = balances.yearly[year];
+                const balance = yearlyBalances[year];
                 return (
                   <td key={year} className={`px-4 py-2 text-right text-sm ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {balance}万円
@@ -377,12 +366,12 @@ export function CashFlowForm() {
               })}
             </tr>
             <tr className="bg-gray-50 font-medium">
-              <td className="px-4 py-2 text-sm text-gray-900 sticky left-0 bg-gray-50">総収支</td>
+              <td className="px-4 py-2 text-sm text-gray-900 sticky left-0 bg-gray-50">総資産</td>
               {years.map(year => {
-                const balance = balances.cumulative[year];
+                const assets = investmentData.assets[year];
                 return (
-                  <td key={year} className={`px-4 py-2 text-right text-sm ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {balance}万円
+                  <td key={year} className={`px-4 py-2 text-right text-sm ${assets >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {assets}万円
                   </td>
                 );
               })}
